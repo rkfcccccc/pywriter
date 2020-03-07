@@ -1,8 +1,27 @@
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
 import random
+import os
 
-letters = {}
+input_file = 'input.txt'
+output_folder = 'output'
+backgrounds = [
+    {
+        'path': 'resources/bg1.jpg',
+        'start_x': 20,
+        'start_y': 130,
+        'line_height': 118,
+        'max_y': 2400
+    },
+
+    {
+        'path': 'resources/bg2.jpg',
+        'start_x': 250,
+        'start_y': 100,
+        'line_height': 118,
+        'max_y': 2400
+    }
+]
 
 def crop_img(image):
     pixels = image.load()
@@ -18,7 +37,7 @@ def crop_img(image):
 
     return image.crop((minw, minh, maxw, maxh))
 
-def read_letters(path, letters_map, maxh):
+def load_letters(path, letters_map, maxh):
     img = Image.open(path).convert('RGBA')
     arr = np.array(np.asarray(img))
 
@@ -41,7 +60,7 @@ def read_letters(path, letters_map, maxh):
         else:
             if lin != -1:
                 letter = tr_img.crop((lin, 0, i + 5, h))
-                letter.thumbnail((letter.size[0], maxh), Image.BICUBIC)
+                letter.thumbnail((w, maxh), Image.BICUBIC)
                 letters[letters_map[k]] = letters.get(letters_map[k], []) + [crop_img(letter)]
 
                 lin = -1
@@ -50,49 +69,94 @@ def read_letters(path, letters_map, maxh):
                 if k >= len(letters_map):
                     return
 
-read_letters('resources/letters.jpg', 'abcdefghijklmnopqrstuvwxyz', 120)
-read_letters('resources/l3.jpg', 'abcefghijklmnopqrstuvw', 200)
-read_letters('resources/c1.jpg', '1234567890.,()', 200)
+def show_letters():
+    global x, y
+    for k, v in letters.items():
+        for limg in v + [' '] + [random.choice(letters[x]) for x in '(' + str(len(v)) + ')']:
+            if limg == ' ':
+                x += 30
+                continue
+                
+            ly = y - limg.size[1]
+            if k in ['y', 'g', 'p', ',']:
+                ly += 20
+            
+            bg.paste(limg, (x, ly), limg)
+            x += limg.size[0] + 20
 
-bg = Image.open('resources/background.jpg')
+        x = 20
+        y += 118 // 2
 
-s = '1. in the morning my father always buys a newspaper in the newspaper stand.\n2. john seldom goes on holiday in autumn\n3. i am occasionally late for classes, but i am not at all proud of it\n4. this film has just been shown to the young audience'
-y = 130
-x = 20
-for line in s.split('\n'):
-    for word in line.split():
+letters = {}
+load_letters('resources/l1.jpg', 'aaaaaaaaaabbbbbbbcccccddddddeeeeee', 120)
+load_letters('resources/l2.jpg', 'ffffffffgggggghhhhhhhiiiiijjjjjkkkkkk', 120)
+load_letters('resources/l3.jpg', 'llllllllmmmmmmmmnnnnnnooooooopppppp', 120)
+load_letters('resources/l4.jpg', 'qqqqqqqrrrrrrrrssssssstttttttuuuuuuu', 120)
+load_letters('resources/l5.jpg', 'vvvvvvvvvvvwwwwwwxxxxxxxxyyy', 120)
+load_letters('resources/l6.jpg', 'zzzzzzzzz', 120)
+load_letters('resources/ul1.jpg', 'AAABBBCCCDDDEEEFFFGGGHHHIIIJJJKKKLLLMMM', 180)
+load_letters('resources/ul2.jpg', 'NNNOOOOPPPQQQRRRSSSSSTTTTTTTUUUVVVV', 180)
+load_letters('resources/ul3.jpg', 'WWWWWXXXXYYYZZZZ', 180)
+load_letters('resources/spc.jpg', '1234567890.,()', 180)
+load_letters('resources/spc2.jpg', '!!!!?????$$$1234567890', 200)
+
+with open(input_file, 'r') as f:
+    text = ''.join(f.readlines())
+
+for filename in os.listdir(output_folder):
+    file_path = os.path.join(output_folder, filename)
+    if (os.path.isfile(file_path) or os.path.islink(file_path)) and filename[0] != '.':
+        os.unlink(file_path)
+
+bgid = 0
+bgimg, x, y = Image.open(backgrounds[bgid]['path']), backgrounds[bgid]['start_x'], backgrounds[bgid]['start_y']
+for line in text.split('\n'):
+    for word in line.split(' '):
+        if y > backgrounds[bgid % len(backgrounds)]['max_y']:
+            bgimg.filter(ImageFilter.GaussianBlur(1)).save(f'{output_folder}/{bgid}.jpg')
+            bgid += 1
+
+            i = bgid % len(backgrounds)
+            bgimg = Image.open(backgrounds[i]['path'])
+            x = backgrounds[i]['start_x']
+            y = backgrounds[i]['start_y']
+
         word_letters = []
         word_w = 0
 
-        for l in word:
+        for i, l in enumerate(word):
             if letters.get(l) is None:
                 l = l.lower()
             
             if letters.get(l) is None:
                 word_w += 20
+                print('no letter', l)
                 continue
                 
-            limg = random.choice(letters[l.lower()]).rotate(-random.randint(1, 5))
+            limg = random.choice(letters[l]).rotate(-random.randint(1, 5))
             word_letters.append((word_w, limg, l))
-            word_w += limg.size[0] + random.randint(3, 6)
+            word_w += limg.size[0] + (random.randint(3, 6) if i + 1 != len(word) else 0)
         
         if word_w + x > 1650:
-            y += 118
-            x = 20
-
+            y += backgrounds[bgid % len(backgrounds)]['line_height']
+            x = backgrounds[bgid % len(backgrounds)]['start_x']
+        
         for lx, limg, l in word_letters:
             ly = y - limg.size[1]
-            if l in ['y', 'g', 'p', ',']:
-                ly += 20
+            if l in ['y', 'g', 'p']:
+                ly += 15
             
-            bg.paste(limg, (x + lx, ly), limg)
+            if l in [',']:
+                ly += 10
+            
+            bgimg.paste(limg, (x + lx, ly), limg)
         
-        x += word_w + 40
+        x += word_w + 30
         if x > 1650:
-            y += 118
-            x = 20
+            y += backgrounds[bgid % len(backgrounds)]['line_height']
+            x = backgrounds[bgid % len(backgrounds)]['start_x']
     
-    x = 20
-    y += 118
+    x = backgrounds[bgid % len(backgrounds)]['start_x']
+    y += backgrounds[bgid % len(backgrounds)]['line_height']
 
-bg.show()
+bgimg.filter(ImageFilter.GaussianBlur(1)).save(f'{output_folder}/{bgid}.jpg')
